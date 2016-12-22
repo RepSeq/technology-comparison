@@ -1,19 +1,13 @@
-## Note on samples
+## Dataset origin
 
-The folder contains clonotype tables obtained for a unified T-cell repertoire sample.
+The folder contains clonotype tables obtained for replicas of an unified T-cell repertoire sample.
 
-Naming convention is the following: ``${sample id}_${ng of input RNA}_${TCR chain}.txt.gz``.
+Naming convention is the following: ``${replica id}_${ng of input RNA}_${TCR chain}.txt.gz``. Here ``${replica id}`` is the identifier of independent replicas split at the level RNA extracted from sorted T-cells. For example, ``A2_8_beta.txt.gz`` means TCR beta sequencing performed for ``A2`` replica that contains 10ng RNA.
 
-Here ``${sample id}`` is the identifier of an independent sample split at the level RNA extracted from sorted T-cells.
+> **NOTE** The quantity of input RNA was determined experimentally, and is somewhat different from the expected 10/100ng. Files a compressed using gzip.
 
-The quantity of input RNA was determined experimentally, and is somewhat different from the expected 10/100ng.
+## Data pre-processing
 
-For example, ``A2_8_beta.txt.gz`` means TCR beta sequencing performed for sample ``A2`` that is 10ng RNA.
+De-multiplexing, unique molecular identifier (UMI) extraction and UMI-based consensus assembly was performed using [MIGEC](https://github.com/mikessh/migec) software. A threshold of 12 and 6 reads per UMI was used for 8 and 65 ng samples respectively. V-D-J mapping and CDR3 extraction was performed using [MIXCR](https://github.com/milaboratory/mixcr) software with default settings.
 
-Files a compressed using gzip.
-
-## Note on data pre-processing
-
-De-multiplexing, unique molecular identifier (UMI) extraction and UMI-based consensus assembly was performed using MIGEC software. A threshold of 12 and 6 reads per UMI was used for 8 and 65 ng samples respectively. V-D-J mapping and CDR3 extraction was performed using MIXCR software with default settings.
-
-Creadit for data pre-processing goes to Alexey Davidov.
+> Creadit for data pre-processing goes to Alexey Davidov.
