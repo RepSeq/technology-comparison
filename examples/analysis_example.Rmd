@@ -1,0 +1,202 @@
+---
+title: "An example of data analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Libraries
+
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+
+Auxiliary functions
+
+```{r}
+get_segment_id = function(s) {
+  unlist(lapply(strsplit(s, "*", fixed=T), function(x) x[1]))
+}
+
+read_mixcr = function(file_name) {
+  .df = read.table(file_name, header=T, stringsAsFactors = F, sep="\t", fill = T) %>%
+    select(Clone.ID, Clone.count, All.V.hits, All.D.hits, All.J.hits, N..Seq..CDR3, AA..Seq..CDR3)
+  colnames(.df) = c("clone.id", "count", "v", "d", "j", "cdr3nt", "cdr3aa")
+  .df$freq = .df$count / sum(.df$count)
+  
+  .df %>% mutate(v=get_segment_id(v),d=get_segment_id(d),j=get_segment_id(j))
+}
+
+
+head(read_mixcr("chudakovlab/A1_8_alpha.txt.gz"))
+```
+
+Read samples
+
+```{r}
+df = data.frame()
+for (chain in c("alpha", "beta")) {
+for (replica in c("A1", "A2", "A3")) {
+  file_name = paste0("chudakovlab/", replica, "_", 8, "_", chain, ".txt.gz")
+  .df = read_mixcr(file_name)
+  .df$replica = replica
+  .df$chain = chain
+  .df$amount = "8ng"
+  df = rbind (df, .df)
+}
+for (replica in c("B", "C", "D")) {
+  file_name = paste0("chudakovlab/", replica, "_", 65, "_", chain, ".txt.gz")
+  .df = read_mixcr(file_name)
+  .df$replica = replica
+  .df$chain = chain
+  .df$amount = "65ng"
+  df = rbind (df, .df)
+}
+}
+
+summary(df)
+```
+
+## Basic repertoire properties
+
+### Segment usage
+
+Summarize data
+
+```{r}
+df.segm = df %>%
+  group_by(replica, chain, amount, v, j) %>%
+  summarize(freq = sum(freq), uniq = n()) %>%
+  group_by(replica) %>%
+  mutate(freq.rank = rank(-freq))
+
+df.segm.v = df.segm %>%
+  group_by(replica, chain, amount, v) %>%
+  summarize(freq = sum(freq), uniq = sum(uniq)) %>%
+  group_by(v) %>%
+  mutate(freq.tot = mean(freq))
+
+df.segm.v$v <- factor(df.segm.v$v, levels=df.segm.v$v[order(df.segm.v$freq.tot)])
+
+df.segm.j = df.segm %>%
+  group_by(replica, chain, amount, j) %>%
+  summarize(freq = sum(freq), uniq = sum(uniq))  %>%
+  group_by(j) %>%
+  mutate(freq.tot = mean(freq))
+
+df.segm.j$j <- factor(df.segm.j$j, levels=df.segm.j$j[order(df.segm.j$freq.tot)])
+```
+
+Variable segment usage
+
+```{r}
+ggplot(df.segm.v, aes(x=v, y=freq, color=amount, linetype=replica)) +
+  geom_point() + 
+  geom_line(aes(group=replica)) +
+  coord_flip() +
+  facet_wrap(~chain, scales="free") + 
+  xlab("Frequency") + ylab("") +
+  scale_color_brewer(palette = "Set1") + 
+  theme_light()
+
+a <- aov(freq ~ v + amount : v, df.segm.v)
+summary(a)
+```
+
+Joining segment usage
+
+```{r}
+ggplot(df.segm.j, aes(x=j, y=freq, color=amount, linetype=replica)) +
+  geom_point() + 
+  geom_line(aes(group=replica)) +
+  coord_flip() +
+  xlab("Frequency") + ylab("") +
+  scale_color_brewer(palette = "Set1") + 
+  theme_light()
+
+a <- aov(freq ~ j + amount : j, df.segm.j)
+summary(a)
+```
+
+> Note that there is some difference is segment usage related to the starting amount of RNA
+
+V-J segment usage
+
+```{r}
+ggplot(df.segm, aes(x=freq.rank, y=freq, color=replica)) +
+  geom_point(shape=21) + 
+  scale_x_log10("V-J pair rank") + scale_y_log10("Frequency") +
+  facet_grid(chain~amount, scales="free") + 
+  scale_color_brewer(palette = "Paired") + 
+  theme_light()
+```
+
+### Spectratype
+
+```{r}
+df.sp = df %>%
+  mutate(cdr3.len = nchar(cdr3nt)) %>%
+  group_by(replica, chain, amount, cdr3.len) %>%
+  summarize(freq = sum(freq), uniq=n())
+```
+
+CDR3 length distribution and out-of-frame sequences
+
+```{r}
+library(scales)
+df.sp$in.frame = ifelse(df.sp$cdr3.len %% 3 == 0, "in-frame", "out-of-frame")
+ggplot(df.sp, aes(x=cdr3.len, y=freq, fill=amount, color=amount)) +
+  geom_boxplot(aes(group=interaction(cdr3.len,amount))) +
+  scale_x_continuous("CDR3 nucleotide sequence length", limits=c(21,66), breaks = seq(21,66,by=3)) + 
+  scale_y_continuous("", labels=percent) +
+  facet_grid(in.frame~chain, scales="free") + 
+  scale_fill_brewer(palette = "Set1") + 
+  scale_color_brewer(palette = "Set1") + 
+  theme_light()
+```
+
+## Clonotype abundance quantification
+
+Clonotype frequency and rank
+
+```{r}
+ggplot(df, aes(x=clone.id, y=freq, linetype=replica, group=replica, color=amount)) + 
+  geom_line() + 
+  scale_y_log10() + scale_x_log10() + 
+  facet_grid(~chain, scales="free") + 
+  scale_color_brewer(palette = "Set1") + 
+  theme_light()
+```
+
+```{r}
+df.cv = df %>%
+  group_by(chain, amount, cdr3nt) %>%
+  mutate(freq.m = mean(freq), freq.sd = sd(freq), incidence = n(), count.s = sum(count)) 
+```
+
+```{r}
+ggplot(subset(df.cv, incidence==3), aes(x=freq.m, y = freq.sd / freq.m * (1 + 1/12))) + 
+  geom_point(shape=21) + 
+  scale_y_log10("Coefficient of variance", labels=percent) +
+  scale_x_log10("Clonotype frequency") +
+  facet_grid(amount~chain) + 
+  theme_light()
+```
+
+```{r}
+df.in = df.cv %>%
+  group_by(chain, amount, cdr3nt) %>%
+  group_by(chain, amount, count.s) %>%
+  summarize(incidence = sum(incidence) / 9 / length(unique(cdr3nt)))
+```
+
+```{r}
+ggplot(df.in, aes(x=count.s, y = incidence)) + 
+  geom_point(shape=21) + 
+  scale_x_continuous(limits=c(1,20))+
+  facet_grid(amount~chain) + 
+  theme_light()
+```
