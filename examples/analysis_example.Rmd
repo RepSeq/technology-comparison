@@ -114,6 +114,7 @@ ggplot(df.segm.j, aes(x=j, y=freq, color=amount, linetype=replica)) +
   geom_line(aes(group=replica)) +
   coord_flip() +
   xlab("Frequency") + ylab("") +
+  facet_wrap(~chain, scales="free") + 
   scale_color_brewer(palette = "Set1") + 
   theme_light()
 
@@ -199,4 +200,28 @@ ggplot(df.in, aes(x=count.s, y = incidence)) +
   scale_x_continuous(limits=c(1,20))+
   facet_grid(amount~chain) + 
   theme_light()
+```
+
+```{r}
+df.f = df %>%
+  group_by(cdr3nt) %>%
+  summarize(count = sum(count)) %>%
+  mutate(freq = count/sum(count))
+```
+
+```{r}
+df.i = df %>%
+  group_by(cdr3nt, chain, amount) %>%
+  summarize(incidence = n())
+  
+df.if = merge(df.f, df.i)
+```
+
+```{r}
+df.prob = df.if %>%
+  group_by(count, freq, amount) %>%
+  summarize(detect.prob = sum(incidence) / 3 / n())
+```
+
+```{r}
 ```
