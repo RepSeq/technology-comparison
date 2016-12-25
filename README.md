@@ -24,6 +24,8 @@ General ideas for *in silico* protocol comparison:
 
 ### Comparing repertoire diversity estimates
 
+The following diversity metrics are considered:
+
 * **Chao1 index** 
 
 * **Shannon index**
@@ -34,33 +36,41 @@ General ideas for *in silico* protocol comparison:
 
 ### Comparing V/J segment usage
 
-Only segments, ignore alleles, use only major allele (``*01``)
+![V usage](https://raw.githubusercontent.com/RepSeq/technology-comparison/master/assets/vusage.png "Variable segment frequency profiles for different replicas and different starting amounts of RNA.")
 
-Compare V and J frequency distributions, both weighted (by read) and unweighted (by clonotype, i.e. unique CDR3)
+In this section only V/J segments are considered. Allelic variants are ignored, use only major allele (``*01``) is used.
 
-Compare frequency of V-J junctions, weighted and unweighted
+* Compare V and J frequency distributions, both weighted (by read) and unweighted (by clonotype, i.e. unique CDR3)
 
-Perform 2-way ANOVA test and post-hoc T-test to detect V and J segments that are missed by certain technologies
+* Compare frequency of V-J junctions, weighted and unweighted
+
+* Perform 2-way ANOVA test and post-hoc T-test to detect V and J segments that are missed by certain technologies
 
 ### Comparing CDR3 structure
 
-Compare the CDR3 length distribution
+![Spectratype](https://raw.githubusercontent.com/RepSeq/technology-comparison/master/assets/spectra.png "CDR3 length distribution of in-frame and out-of-frame clonotypes.")
 
-Compare the number of out-of-frame V-J junctions
+* Compare the CDR3 length distribution
+
+* Compare the number of out-of-frame V-J junctions
 
 ## Using replicas
 
 Compare the variance of Chao1 diversity index across samples. Chao1 metric describes the diversity of naive cells using the count of singletons and doubletons and is very sensitive to these numbers. 
 
-Number of V-J pairs detected in one, two, etc replicas. Variance of V, J and V-J pair frequency (weighted by read) across replicas
+Compare the number of unique V-J pairs detected in one, two, etc replicas and the variance of V, J and V-J pair frequency (weighted by read) across replicas.
 
 # Analysis of T-cell clonotype quantification
 
 The basic idea of this benchmark is to compare the robustness of T-cell clonotype quantification and to derive a model for clonotype abundance distribution each technology. This model (hereafter called sampling model) should describe the variance of clonotype abundance (for large clonotypes) and the samling probability (for small ones) under the null hypothesis of replicate sampling.
 
+![Scatterplot](https://raw.githubusercontent.com/RepSeq/technology-comparison/master/assets/freq1.png "Correlation of clonotype frequencies.")
+
 * The model should describe the dependence between clonotype frequency variance ``V`` and mean clonotype frequency ``M``
 
 * A model based on read counts and their variance (discrete one) can be applied to rare clonotypes. The probability of missing a clonotype of a given read count due to sampling stochastics can also be calculated from this model.
+
+![Sampling model](https://raw.githubusercontent.com/RepSeq/technology-comparison/master/assets/freq2.png "Mean clonotype count and coefficient of variance.")
 
 * Coefficients of variance ``V/M`` can be compared across technologies
 
