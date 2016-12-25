@@ -99,7 +99,7 @@ ggplot(df.segm.v, aes(x=v, y=freq, color=amount, linetype=replica)) +
   geom_point() + 
   geom_line(aes(group=replica)) +
   coord_flip() +
-  facet_wrap(~chain, scales="free") + 
+  facet_grid(chain~., space = "free") + 
   xlab("Frequency") + ylab("") +
   scale_color_brewer(palette = "Set1") + 
   theme_light()
@@ -116,7 +116,7 @@ ggplot(df.segm.j, aes(x=j, y=freq, color=amount, linetype=replica)) +
   geom_line(aes(group=replica)) +
   coord_flip() +
   xlab("Frequency") + ylab("") +
-  facet_wrap(~chain, scales="free") + 
+  facet_grid(chain~., space = "free") + 
   scale_color_brewer(palette = "Set1") + 
   theme_light()
 
@@ -149,7 +149,6 @@ df.sp = df %>%
 CDR3 length distribution and out-of-frame sequences
 
 ```{r}
-library(scales)
 df.sp$in.frame = ifelse(df.sp$cdr3.len %% 3 == 0, "in-frame", "out-of-frame")
 ggplot(df.sp, aes(x=cdr3.len, y=freq, fill=amount, color=amount)) +
   geom_boxplot(aes(group=interaction(cdr3.len,amount))) +
@@ -174,29 +173,38 @@ ggplot(df, aes(x=clone.id, y=freq, linetype=replica, group=replica, color=amount
   theme_light()
 ```
 
-Do 
+Do some preprocessing
 
 ```{r}
 df.1 = df %>%
   select(cdr3nt, replica, amount, count, chain)
 
+# fill missing clonotypes with 0
 dummy = expand.grid(cdr3nt = unique(df.1$cdr3nt),
                     replica = unique(df.1$replica),
                     chain = unique(df.1$chain),
                     amount = unique(df.1$amount))
 
 real_ccdr = interaction(df.1$chain, df.1$cdr3nt)
+real_replamount = interaction(df.1$replica, df.1$amount)
 dummy = subset(dummy, interaction(chain, cdr3nt) %in% real_ccdr)
+dummy = subset(dummy, interaction(replica, amount) %in% real_replamount)
 dummy$count = 0
-df.1 = rbind(df.1, dummy)
+
+df.1 = rbind(df.1, dummy) %>%
+  group_by(cdr3nt, chain, replica, amount) %>%
+  summarize(count = sum(count))
+
+df.1$count.grand = sum(df.1$count)
 
 df.1 = df.1 %>%
-  mutate(count.grand = sum(count)) %>%
   group_by(cdr3nt) %>%
   mutate(count.total = sum(count)) %>%
   group_by(replica) %>%
   mutate(count.replica.total = sum(count))
 ```
+
+### Log frequency variance
 
 Clonotype frequency in different replicas versus clonotype frequency estimated from pooled sample
 
@@ -211,6 +219,30 @@ ggplot(subset(df.1,count>0), aes(x=count.total/count.grand,
   scale_color_brewer(palette = "Paired") +
   theme_light()
 ```
+
+Coefficient of variance for log-transformed frequencies
+
+```{r}
+df.5 = df.1 %>%
+  group_by(cdr3nt, amount) %>%
+  mutate(min.count = min(count)) %>%
+  filter(min.count > 0)
+
+df.5 = df.5 %>%
+  group_by(cdr3nt, amount, replica) %>%
+  mutate(freq = log10(count / count.replica.total)) %>%
+  group_by(cdr3nt, amount) %>%
+  summarize(freq.mean = mean(freq), freq.sd = sd(freq))
+
+ggplot(df.5, aes(x=10^freq.mean, y=freq.sd/abs(freq.mean), color = amount)) +
+  geom_point(shape=21) +
+  scale_x_log10("Mean frequency in 3 replicas") + 
+  scale_y_continuous("Coefficient of variance", labels=percent) +
+  scale_color_brewer(palette = "Set1") +
+  theme_light()
+```
+
+### Clonotype cDNA count
 
 Distribution of clonotype count in 8 and 65 ng samples for clonotypes from different frequency tiers.
 
@@ -229,81 +261,62 @@ ggplot(subset(df.2), aes(x = count, y = nn, color=10^log.freq,
                          group=factor(log.freq))) +
   geom_line() +
   geom_point() +
-  facet_grid(chain~amount, space="free", scales="free") +
+  facet_grid(chain~amount, scales="free", space = "free") +
   scale_y_log10("Number of clonotypes") + scale_x_log10("Count in sample") +
   scale_color_gradientn("Frequency", colors=r, trans="log") +
   theme_light()
 ```
 
-Coefficient of variance versus clonotype abundance. Dashed and dotted lines show CV of Poisson and Beta Binomial distribution with $B(0,0)$ prior respectively.
+Coefficient of variance versus clonotype abundance. Dashed and dotted lines show CV of Poisson and Beta Binomial distribution with Jeffreys ($B(1/2,1/2)$) prior respectively. Note that while rare clonotypes are perfectly fitted with a simple Poisson model, high-abundance clonotypes have relatively high coefficient of variance, esp for 8ng sample (plausible explanations: TCR expression, cell clumping).
 
 ```{r}
 df.3 = df.1 %>%
   group_by(amount, chain, count.total, count.grand) %>%
   summarize(count.mean = mean(count), 
-            count.sd = sd(count) * 2 / 3,
+            count.sd = sd(count),
             mean.replica.size = mean(count.replica.total)) %>%
   group_by(count.mean, mean.replica.size) %>%
-  mutate(a = count.mean + 0,
-         b = mean.replica.size - count.mean + 0,
+  mutate(a = count.mean + 1/2,
+         b = mean.replica.size - count.mean + 1/2,
          bb.mean = mean.replica.size * a / (a + b),
          bb.sd = sqrt(mean.replica.size * a * b * (a + b + mean.replica.size) / (a + b) / (a + b) / (a + b + 1)))
 
 ggplot(df.3) + 
-  #geom_smooth(color="black") +
   geom_point(aes(x=count.mean, y = count.sd / count.mean, 
                  fill=10^(round(5*log10(count.total/count.grand))/5)), color="black", shape=21) +
   geom_line(aes(x=count.mean, y = 1 / sqrt(count.mean)), color="black", linetype="dashed") +
   geom_line(aes(x=count.mean, y = bb.sd / bb.mean), color="black", linetype="dotted") +
-  facet_grid(chain~amount) +
+  facet_grid(amount~chain, scales="free", space = "free") +
   scale_y_continuous("Coefficient of variance", labels = percent) +
   scale_x_log10("Mean count", breaks = c(0.1, 1, 10, 100)) +
   scale_fill_gradientn("Frequency", colors=r, trans="log") +
   theme_light()
 ```
 
+### High-abundance clonotypes
+
+Get some high-abundance clonotypes
+
 ```{r}
-library(TailRank)
+top10_clones = df.1 %>%
+  group_by(cdr3nt) %>%
+  summarize(x = mean(count.total)) %>%
+  mutate(rank = rank(-x)) %>%
+  arrange(rank) %>%
+  filter(rank <= 10)
 
-dbb = function (x, N, u, v) 
-{
-    beta(x + u, N - x + v) / beta(u, v) * choose(N, x)
-}
+df.4 = subset(df.1, cdr3nt %in% top10_clones$cdr3nt)
+```
 
-dbbl = function (x, N, u, v) 
-{
-    betal(x + u, N - x + v) - betal(u, v) + lchoose(N, x)
-}
+Plot frequency variance for top $10$ clonotypes
 
-# Use Jeffreys prior
-df.1$alpha = df.1$count.total + 1/2
-df.1$beta = df.1$count.grand - df.1$count.total + 1/2
+```{r}
+df.4$clone.id = paste(df.4$chain, as.integer(as.factor(df.4$cdr3nt)))
+df.4$clone.id = factor(df.4$clone.id, df.4$clone.id[order(-df.4$count.total)])
 
-bbnll = function(pars, data){
-  A <- pars[[1]]
-  B <- pars[[2]]
-  
-  
-  
-  return (-sum(dbb(data, alpha, beta, log = T)))
-}
-
-param_guess = function(data) {
-  с(1, 1/2) # ala Jeffreys prior
-}
-
-fit_beta <- function(data) {
-  list(nloptr(x0 = param_guess(data), eval_f = betanll, 
-              lb = c(0,0), data = data,
-              opts = list(algorithm = "NLOPT_LN_SBPLX", 
-                          maxeval = 1e5))$solution)
-}
-
-fit.params <- df.1 %>% 
-  group_by(mutation.type) %>%
-  summarize(fit = fit_beta(freq))
-
-fit.params$alpha <- unlist(lapply(fit.params$fit, function(x) x[1]))
-fit.params$beta <- unlist(lapply(fit.params$fit, function(x) x[2]))
-fit.params$fit <- NULL
+ggplot(df.4, aes(x=clone.id, group=interaction(clone.id,amount), 
+                 fill=amount, y=count/count.replica.total)) +
+  geom_boxplot() + xlab("") + ylab("Frequency in replica") +
+  scale_fill_brewer(palette = "Set1") +
+  theme_light()  
 ```
