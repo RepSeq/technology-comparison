@@ -12,6 +12,8 @@ Libraries
 ```{r}
 library(dplyr)
 library(ggplot2)
+library(RColorBrewer)
+library(scales)
 ```
 
 Auxiliary functions
@@ -71,7 +73,7 @@ df.segm = df %>%
   group_by(replica, chain, amount, v, j) %>%
   summarize(freq = sum(freq), uniq = n()) %>%
   group_by(replica) %>%
-  mutate(freq.rank = rank(-freq))
+  mutate(freq.rank = rank(-freq))  
 
 df.segm.v = df.segm %>%
   group_by(replica, chain, amount, v) %>%
@@ -172,56 +174,136 @@ ggplot(df, aes(x=clone.id, y=freq, linetype=replica, group=replica, color=amount
   theme_light()
 ```
 
-```{r}
-df.cv = df %>%
-  group_by(chain, amount, cdr3nt) %>%
-  mutate(freq.m = mean(freq), freq.sd = sd(freq), incidence = n(), count.s = sum(count)) 
-```
+Do 
 
 ```{r}
-ggplot(subset(df.cv, incidence==3), aes(x=freq.m, y = freq.sd / freq.m * (1 + 1/12))) + 
-  geom_point(shape=21) + 
-  scale_y_log10("Coefficient of variance", labels=percent) +
-  scale_x_log10("Clonotype frequency") +
-  facet_grid(amount~chain) + 
-  theme_light()
-```
+df.1 = df %>%
+  select(cdr3nt, replica, amount, count, chain)
 
-```{r}
-df.in = df.cv %>%
-  group_by(chain, amount, cdr3nt) %>%
-  group_by(chain, amount, count.s) %>%
-  summarize(incidence = sum(incidence) / 9 / length(unique(cdr3nt)))
-```
+dummy = expand.grid(cdr3nt = unique(df.1$cdr3nt),
+                    replica = unique(df.1$replica),
+                    chain = unique(df.1$chain),
+                    amount = unique(df.1$amount))
 
-```{r}
-ggplot(df.in, aes(x=count.s, y = incidence)) + 
-  geom_point(shape=21) + 
-  scale_x_continuous(limits=c(1,20))+
-  facet_grid(amount~chain) + 
-  theme_light()
-```
+real_ccdr = interaction(df.1$chain, df.1$cdr3nt)
+dummy = subset(dummy, interaction(chain, cdr3nt) %in% real_ccdr)
+dummy$count = 0
+df.1 = rbind(df.1, dummy)
 
-```{r}
-df.f = df %>%
+df.1 = df.1 %>%
+  mutate(count.grand = sum(count)) %>%
   group_by(cdr3nt) %>%
-  summarize(count = sum(count)) %>%
-  mutate(freq = count/sum(count))
+  mutate(count.total = sum(count)) %>%
+  group_by(replica) %>%
+  mutate(count.replica.total = sum(count))
+```
+
+Clonotype frequency in different replicas versus clonotype frequency estimated from pooled sample
+
+```{r}
+ggplot(subset(df.1,count>0), aes(x=count.total/count.grand, 
+                                  y=count/count.replica.total)) +
+  geom_point(aes(color=replica), shape=21) + 
+  geom_abline(slope = 1, intercept = 0, color="black", linetype="dashed") +
+  facet_grid(chain~amount, space="free", scales="free") +
+  scale_x_log10("Frequency in pool", limits=c(1e-6,1e-1), breaks=10^(-6:-1)) +
+  scale_y_log10("Frequency in replica", limits=c(1e-6,1e-1), breaks=10^(-6:-1)) +
+  scale_color_brewer(palette = "Paired") +
+  theme_light()
+```
+
+Distribution of clonotype count in 8 and 65 ng samples for clonotypes from different frequency tiers.
+
+```{r}
+df.2 = df.1 %>%
+  mutate(log.freq = round(5*log10(count.total/count.grand))/5) %>%
+  group_by(count, amount, chain, log.freq) %>%
+  summarize(nn = n()) %>%
+  group_by(amount, log.freq) %>%
+  mutate(P = nn / sum(nn))
+
+rf <- colorRampPalette(rev(brewer.pal(11, 'Spectral')))
+r <- rf(40)
+
+ggplot(subset(df.2), aes(x = count, y = nn, color=10^log.freq,
+                         group=factor(log.freq))) +
+  geom_line() +
+  geom_point() +
+  facet_grid(chain~amount, space="free", scales="free") +
+  scale_y_log10("Number of clonotypes") + scale_x_log10("Count in sample") +
+  scale_color_gradientn("Frequency", colors=r, trans="log") +
+  theme_light()
+```
+
+Coefficient of variance versus clonotype abundance. Dashed and dotted lines show CV of Poisson and Beta Binomial distribution with $B(0,0)$ prior respectively.
+
+```{r}
+df.3 = df.1 %>%
+  group_by(amount, chain, count.total, count.grand) %>%
+  summarize(count.mean = mean(count), 
+            count.sd = sd(count) * 2 / 3,
+            mean.replica.size = mean(count.replica.total)) %>%
+  group_by(count.mean, mean.replica.size) %>%
+  mutate(a = count.mean + 0,
+         b = mean.replica.size - count.mean + 0,
+         bb.mean = mean.replica.size * a / (a + b),
+         bb.sd = sqrt(mean.replica.size * a * b * (a + b + mean.replica.size) / (a + b) / (a + b) / (a + b + 1)))
+
+ggplot(df.3) + 
+  #geom_smooth(color="black") +
+  geom_point(aes(x=count.mean, y = count.sd / count.mean, 
+                 fill=10^(round(5*log10(count.total/count.grand))/5)), color="black", shape=21) +
+  geom_line(aes(x=count.mean, y = 1 / sqrt(count.mean)), color="black", linetype="dashed") +
+  geom_line(aes(x=count.mean, y = bb.sd / bb.mean), color="black", linetype="dotted") +
+  facet_grid(chain~amount) +
+  scale_y_continuous("Coefficient of variance", labels = percent) +
+  scale_x_log10("Mean count", breaks = c(0.1, 1, 10, 100)) +
+  scale_fill_gradientn("Frequency", colors=r, trans="log") +
+  theme_light()
 ```
 
 ```{r}
-df.i = df %>%
-  group_by(cdr3nt, chain, amount) %>%
-  summarize(incidence = n())
+library(TailRank)
+
+dbb = function (x, N, u, v) 
+{
+    beta(x + u, N - x + v) / beta(u, v) * choose(N, x)
+}
+
+dbbl = function (x, N, u, v) 
+{
+    betal(x + u, N - x + v) - betal(u, v) + lchoose(N, x)
+}
+
+# Use Jeffreys prior
+df.1$alpha = df.1$count.total + 1/2
+df.1$beta = df.1$count.grand - df.1$count.total + 1/2
+
+bbnll = function(pars, data){
+  A <- pars[[1]]
+  B <- pars[[2]]
   
-df.if = merge(df.f, df.i)
-```
+  
+  
+  return (-sum(dbb(data, alpha, beta, log = T)))
+}
 
-```{r}
-df.prob = df.if %>%
-  group_by(count, freq, amount) %>%
-  summarize(detect.prob = sum(incidence) / 3 / n())
-```
+param_guess = function(data) {
+  с(1, 1/2) # ala Jeffreys prior
+}
 
-```{r}
+fit_beta <- function(data) {
+  list(nloptr(x0 = param_guess(data), eval_f = betanll, 
+              lb = c(0,0), data = data,
+              opts = list(algorithm = "NLOPT_LN_SBPLX", 
+                          maxeval = 1e5))$solution)
+}
+
+fit.params <- df.1 %>% 
+  group_by(mutation.type) %>%
+  summarize(fit = fit_beta(freq))
+
+fit.params$alpha <- unlist(lapply(fit.params$fit, function(x) x[1]))
+fit.params$beta <- unlist(lapply(fit.params$fit, function(x) x[2]))
+fit.params$fit <- NULL
 ```
