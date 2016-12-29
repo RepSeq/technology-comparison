@@ -58,7 +58,7 @@ In this section only V/J segments are considered, allelic variants (``*02,*03,..
 
 * Perform 2-way ANOVA test and post-hoc T-test to detect V and J segments that are under- or over-samples by certain technologies
 
-![Vusage](https://raw.githubusercontent.com/RepSeq/technology-comparison/master/assets/spectra.png "Variable segment frequencies.")
+![Vusage](https://raw.githubusercontent.com/RepSeq/technology-comparison/master/assets/vusage.png "Variable segment frequencies.")
 
 #### Comparing CDR3 structure
 
