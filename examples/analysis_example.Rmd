@@ -1,24 +1,26 @@
 ---
-title: "An example of data analysis"
-output: pdf_document
+title: "Example analysis"
+output: 
+  html_document:
+    code_folding: hide
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Libraries
+Dataset summary
 
-```{r}
+```{r results=FALSE, message=FALSE, warning=FALSE, error=FALSE}
+# Libraries
 library(dplyr)
 library(ggplot2)
 library(RColorBrewer)
 library(scales)
-```
+library(splines)
 
-Auxiliary functions
+#Auxiliary functions
 
-```{r}
 get_segment_id = function(s) {
   unlist(lapply(strsplit(s, "*", fixed=T), function(x) x[1]))
 }
@@ -32,13 +34,10 @@ read_mixcr = function(file_name) {
   .df %>% mutate(v=get_segment_id(v),d=get_segment_id(d),j=get_segment_id(j))
 }
 
-
 head(read_mixcr("chudakovlab/A1_8_alpha.txt.gz"))
-```
 
-Read samples
+# Load data
 
-```{r}
 df = data.frame()
 for (chain in c("alpha", "beta")) {
 for (replica in c("A1", "A2", "A3")) {
@@ -59,6 +58,13 @@ for (replica in c("B", "C", "D")) {
 }
 }
 
+df$v <- as.factor(df$v)
+df$d <- as.factor(df$d)
+df$j <- as.factor(df$j)
+df$chain <- as.factor(df$chain)
+df$replica <- as.factor(df$replica)
+df$amount <- as.factor(df$amount)
+
 summary(df)
 ```
 
@@ -66,13 +72,13 @@ summary(df)
 
 ### Segment usage
 
-Summarize data
+```{r message=FALSE, warning=FALSE, error=FALSE}
+# Summarize data by V and J
 
-```{r}
 df.segm = df %>%
   group_by(replica, chain, amount, v, j) %>%
   summarize(freq = sum(freq), uniq = n()) %>%
-  group_by(replica) %>%
+  group_by(replica, chain, amount) %>%
   mutate(freq.rank = rank(-freq))  
 
 df.segm.v = df.segm %>%
@@ -81,7 +87,7 @@ df.segm.v = df.segm %>%
   group_by(v) %>%
   mutate(freq.tot = mean(freq))
 
-df.segm.v$v <- factor(df.segm.v$v, levels=df.segm.v$v[order(df.segm.v$freq.tot)])
+df.segm.v$v <- factor(df.segm.v$v, levels=unique(df.segm.v$v[order(df.segm.v$freq.tot)]))
 
 df.segm.j = df.segm %>%
   group_by(replica, chain, amount, j) %>%
@@ -89,20 +95,20 @@ df.segm.j = df.segm %>%
   group_by(j) %>%
   mutate(freq.tot = mean(freq))
 
-df.segm.j$j <- factor(df.segm.j$j, levels=df.segm.j$j[order(df.segm.j$freq.tot)])
+df.segm.j$j <- factor(df.segm.j$j, levels=unique(df.segm.j$j[order(df.segm.j$freq.tot)]))
 ```
 
 Variable segment usage
 
-```{r}
-ggplot(df.segm.v, aes(x=v, y=freq, color=amount, linetype=replica)) +
-  geom_point() + 
-  geom_line(aes(group=replica)) +
+```{r message=FALSE, warning=FALSE, error=FALSE}
+ggplot(df.segm.v, aes(x=v, group=interaction(v,amount), y=freq, color=amount, fill=amount)) +
+  geom_boxplot() +
   coord_flip() +
-  facet_grid(chain~., space = "free") + 
-  xlab("Frequency") + ylab("") +
+  facet_wrap(~chain, scale="free_y") + 
+  xlab("") + ylab("Frequency") +
   scale_color_brewer(palette = "Set1") + 
-  theme_light()
+  scale_fill_brewer(palette = "Set1") + 
+  theme_light() + theme(legend.position="bottom")
 
 a <- aov(freq ~ v + amount : v, df.segm.v)
 summary(a)
@@ -110,15 +116,15 @@ summary(a)
 
 Joining segment usage
 
-```{r}
-ggplot(df.segm.j, aes(x=j, y=freq, color=amount, linetype=replica)) +
-  geom_point() + 
-  geom_line(aes(group=replica)) +
+```{r message=FALSE, warning=FALSE, error=FALSE}
+ggplot(df.segm.j, aes(x=j, group=interaction(j,amount), y=freq, color=amount, fill=amount)) +
+  geom_boxplot() +
   coord_flip() +
-  xlab("Frequency") + ylab("") +
-  facet_grid(chain~., space = "free") + 
+  facet_wrap(~chain, scale="free_y") + 
+  xlab("") + ylab("Frequency") +
   scale_color_brewer(palette = "Set1") + 
-  theme_light()
+  scale_fill_brewer(palette = "Set1") + 
+  theme_light() + theme(legend.position="bottom")
 
 a <- aov(freq ~ j + amount : j, df.segm.j)
 summary(a)
@@ -126,20 +132,21 @@ summary(a)
 
 > Note that there is some difference is segment usage related to the starting amount of RNA
 
-V-J segment usage
+V-J segment pairing
 
-```{r}
+```{r message=FALSE, warning=FALSE, error=FALSE}
 ggplot(df.segm, aes(x=freq.rank, y=freq, color=replica)) +
   geom_point(shape=21) + 
-  scale_x_log10("V-J pair rank") + scale_y_log10("Frequency") +
-  facet_grid(chain~amount, scales="free") + 
+  xlab("V-J pair rank") + 
+  scale_y_log10("Frequency") +
+  facet_grid(amount~chain, scale="free", space = "free") + 
   scale_color_brewer(palette = "Paired") + 
   theme_light()
 ```
 
 ### Spectratype
 
-```{r}
+```{r message=FALSE, warning=FALSE, error=FALSE}
 df.sp = df %>%
   mutate(cdr3.len = nchar(cdr3nt)) %>%
   group_by(replica, chain, amount, cdr3.len) %>%
@@ -148,34 +155,34 @@ df.sp = df %>%
 
 CDR3 length distribution and out-of-frame sequences
 
-```{r}
+```{r message=FALSE, warning=FALSE, error=FALSE}
 df.sp$in.frame = ifelse(df.sp$cdr3.len %% 3 == 0, "in-frame", "out-of-frame")
-ggplot(df.sp, aes(x=cdr3.len, y=freq, fill=amount, color=amount)) +
-  geom_boxplot(aes(group=interaction(cdr3.len,amount))) +
-  scale_x_continuous("CDR3 nucleotide sequence length", limits=c(21,66), breaks = seq(21,66,by=3)) + 
+ggplot(df.sp, aes(x=cdr3.len, y=freq, color=amount)) +
+  geom_line(aes(group=replica)) +
+  scale_x_continuous("CDR3 nucleotide sequence length", limits=c(24, 63), breaks = seq(21, 66, by=3)) + 
   scale_y_continuous("", labels=percent) +
   facet_grid(in.frame~chain, scales="free") + 
   scale_fill_brewer(palette = "Set1") + 
   scale_color_brewer(palette = "Set1") + 
-  theme_light()
+  theme_light() + theme(legend.position="bottom")
 ```
 
 ## Clonotype abundance quantification
 
 Clonotype frequency and rank
 
-```{r}
+```{r message=FALSE, warning=FALSE, error=FALSE}
 ggplot(df, aes(x=clone.id, y=freq, linetype=replica, group=replica, color=amount)) + 
   geom_line() + 
-  scale_y_log10() + scale_x_log10() + 
+  scale_y_log10("Frequency") + scale_x_log10("Rank") + 
   facet_grid(~chain, scales="free") + 
   scale_color_brewer(palette = "Set1") + 
   theme_light()
 ```
 
-Do some preprocessing
+```{r message=FALSE, warning=FALSE, error=FALSE}
+# Do some preprocessing
 
-```{r}
 df.1 = df %>%
   select(cdr3nt, replica, amount, count, chain)
 
@@ -204,11 +211,9 @@ df.1 = df.1 %>%
   mutate(count.replica.total = sum(count))
 ```
 
-### Log frequency variance
+Clonotype frequency in different replicas versus clonotype frequency in the pooled dataset
 
-Clonotype frequency in different replicas versus clonotype frequency estimated from pooled sample
-
-```{r}
+```{r message=FALSE, warning=FALSE, error=FALSE}
 ggplot(subset(df.1,count>0), aes(x=count.total/count.grand, 
                                   y=count/count.replica.total)) +
   geom_point(aes(color=replica), shape=21) + 
@@ -220,33 +225,11 @@ ggplot(subset(df.1,count>0), aes(x=count.total/count.grand,
   theme_light()
 ```
 
-Coefficient of variance for log-transformed frequencies
-
-```{r}
-df.5 = df.1 %>%
-  group_by(cdr3nt, amount) %>%
-  mutate(min.count = min(count)) %>%
-  filter(min.count > 0)
-
-df.5 = df.5 %>%
-  group_by(cdr3nt, amount, replica) %>%
-  mutate(freq = log10(count / count.replica.total)) %>%
-  group_by(cdr3nt, amount) %>%
-  summarize(freq.mean = mean(freq), freq.sd = sd(freq))
-
-ggplot(df.5, aes(x=10^freq.mean, y=freq.sd/abs(freq.mean), color = amount)) +
-  geom_point(shape=21) +
-  scale_x_log10("Mean frequency in 3 replicas") + 
-  scale_y_continuous("Coefficient of variance", labels=percent) +
-  scale_color_brewer(palette = "Set1") +
-  theme_light()
-```
-
 ### Clonotype cDNA count
 
-Distribution of clonotype count in 8 and 65 ng samples for clonotypes from different frequency tiers.
+Distribution of clonotype count in 8ng and 65 ng samples for clonotypes from different frequency tiers as computed based on the pooled dataset.
 
-```{r}
+```{r message=FALSE, warning=FALSE, error=FALSE}
 df.2 = df.1 %>%
   mutate(log.freq = round(5*log10(count.total/count.grand))/5) %>%
   group_by(count, amount, chain, log.freq) %>%
@@ -262,14 +245,15 @@ ggplot(subset(df.2), aes(x = count, y = nn, color=10^log.freq,
   geom_line() +
   geom_point() +
   facet_grid(chain~amount, scales="free", space = "free") +
-  scale_y_log10("Number of clonotypes") + scale_x_log10("Count in sample") +
+  scale_y_log10("Number of clonotypes") + 
+  scale_x_log10("Count in pool") +
   scale_color_gradientn("Frequency", colors=r, trans="log") +
   theme_light()
 ```
 
-Coefficient of variance versus clonotype abundance. Dashed and dotted lines show CV of Poisson and Beta Binomial distribution with Jeffreys ($B(1/2,1/2)$) prior respectively. Note that while rare clonotypes are perfectly fitted with a simple Poisson model, high-abundance clonotypes have relatively high coefficient of variance, esp for 8ng sample (plausible explanations: TCR expression, cell clumping).
+**Discrete case** Coefficient of variance versus clonotype abundance. Dashed and dotted lines show CV of Poisson and Beta Binomial distribution with $B(1/2,1/2)$ prior respectively. Note that while rare clonotypes are nicely fitted with a simple Poisson model, high-abundance clonotypes have relatively high coefficient of variance (plausible explanations: TCR expression, cell clumping).
 
-```{r}
+```{r message=FALSE, warning=FALSE, error=FALSE}
 df.3 = df.1 %>%
   group_by(amount, chain, count.total, count.grand) %>%
   summarize(count.mean = mean(count), 
@@ -288,16 +272,47 @@ ggplot(df.3) +
   geom_line(aes(x=count.mean, y = bb.sd / bb.mean), color="black", linetype="dotted") +
   facet_grid(amount~chain, scales="free", space = "free") +
   scale_y_continuous("Coefficient of variance", labels = percent) +
-  scale_x_log10("Mean count", breaks = c(0.1, 1, 10, 100)) +
+  scale_x_log10("Mean count in 3 replicas", breaks = c(0.1, 1, 10, 100)) +
   scale_fill_gradientn("Frequency", colors=r, trans="log") +
   theme_light()
 ```
 
 ### High-abundance clonotypes
 
-Get some high-abundance clonotypes
+**Continuous case** Coefficient of variance for log-transformed frequencies
 
-```{r}
+```{r message=FALSE, warning=FALSE, error=FALSE}
+df.5 = df.1 %>%
+  group_by(cdr3nt, amount) %>%
+  mutate(min.count = min(count)) %>%
+  filter(min.count > 0)
+
+df.5 = df.5 %>%
+  group_by(cdr3nt, amount, replica) %>%
+  mutate(freq = log10(count / count.replica.total)) %>%
+  group_by(cdr3nt, amount) %>%
+  summarize(freq.mean = mean(freq), freq.sd = sd(freq))
+
+ggplot(df.5, aes(x=10^freq.mean, y=freq.sd/abs(freq.mean), color = amount)) +
+  geom_point(shape=21) +
+  geom_smooth(data=df.5 %>% filter(freq.mean > -4.5, amount == "65ng"),
+                method="lm", aes(weight=10^freq.mean), formula = y~ns(x,3)) +
+  scale_x_log10("Mean frequency in 3 replicas") + 
+  scale_y_continuous("Coefficient of variance", labels=percent) +
+  scale_color_brewer(palette = "Set1") +
+  theme_light()
+
+# Some ANOVA analysis
+
+a <- aov(freq.sd / abs(freq.mean) ~ freq.mean + amount, df.5)
+summary(a)
+```
+
+> Two way ANOVA test for coefficient of variance vs. mean frequency and input amount. All frequencies are log-transofrmed.
+
+```{r message=FALSE, warning=FALSE, error=FALSE}
+# Get some high-abundance clonotypes
+
 top10_clones = df.1 %>%
   group_by(cdr3nt) %>%
   summarize(x = mean(count.total)) %>%
@@ -310,7 +325,7 @@ df.4 = subset(df.1, cdr3nt %in% top10_clones$cdr3nt)
 
 Plot frequency variance for top $10$ clonotypes
 
-```{r}
+```{r message=FALSE, warning=FALSE, error=FALSE}
 df.4$clone.id = paste(df.4$chain, as.integer(as.factor(df.4$cdr3nt)))
 df.4$clone.id = factor(df.4$clone.id, df.4$clone.id[order(-df.4$count.total)])
 
