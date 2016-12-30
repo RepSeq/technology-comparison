@@ -10,4 +10,4 @@ Naming convention is the following: ``${replica id}_${ng of input RNA}_${TCR cha
 
 De-multiplexing, unique molecular identifier (UMI) extraction and UMI-based consensus assembly was performed using [MIGEC](https://github.com/mikessh/migec) software. A threshold of 12 and 6 reads per UMI was used for 8 and 65 ng samples respectively. V-D-J mapping and CDR3 extraction was performed using [MIXCR](https://github.com/milaboratory/mixcr) software with default settings.
 
-> Creadit for data pre-processing goes to Alexey Davidov.
+> Credit for data pre-processing goes to Alexey Davidov.
