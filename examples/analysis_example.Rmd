@@ -79,7 +79,7 @@ df.segm = df %>%
   group_by(replica, chain, amount, v, j) %>%
   summarize(freq = sum(freq), uniq = n()) %>%
   group_by(replica, chain, amount) %>%
-  mutate(freq.rank = rank(-freq))  
+  mutate(freq.rank = rank(-freq, ties.method = "random"))  
 
 df.segm.v = df.segm %>%
   group_by(replica, chain, amount, v) %>%
@@ -135,12 +135,12 @@ summary(a)
 V-J segment pairing
 
 ```{r message=FALSE, warning=FALSE, error=FALSE}
-ggplot(df.segm, aes(x=freq.rank, y=freq, color=replica)) +
-  geom_point(shape=21) + 
-  xlab("V-J pair rank") + 
+ggplot(df.segm, aes(x=freq.rank, y=freq, linetype=replica, color=amount)) +
+  geom_line() + 
+  scale_x_log10("V-J pair rank") + 
   scale_y_log10("Frequency") +
-  facet_grid(amount~chain, scale="free", space = "free") + 
-  scale_color_brewer(palette = "Paired") + 
+  facet_wrap(~chain, scales="free_x") + 
+  scale_color_brewer(palette = "Set1") + 
   theme_light()
 ```
 
